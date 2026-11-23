@@ -1,0 +1,18 @@
+{
+  "id": "bearer-http",
+  "name": "API key / Bearer HTTP",
+  "version": "0.1.0",
+  "publisher": "Morph local examples (unsigned)",
+  "description": "Call APIs using a privately stored Bearer token, bound to exactly one approved origin. For example, a narrowly scoped GitHub token.",
+  "driver": "http-json",
+  "auth": { "type": "bearer" },
+  "network": { "configurable": true, "defaults": ["https://api.github.com"], "singleOrigin": true },
+  "permissions": ["Use your Bearer credential only at the approved HTTPS origin", "Read JSON; optional write requests need separate approval"],
+  "docs": "App: import { plugins } from '@morph/plugins'; await plugins.call('bearer-http','request',{url:'https://api.github.com/user'}). First ask the user to install/approve this plugin and enter a narrowly scoped token in the protected Plugins panel. Never ask them to paste a token into chat or app source. The broker injects Authorization: Bearer privately. Exactly one HTTPS origin may be approved. To change origins, remove the plugin (which clears its credential), then reinstall. GET is default; writes require a separate approval. No arbitrary headers or redirects. Keys sent as query parameters or other auth schemes are not supported yet. Source and agent never receive the stored token.",
+  "methods": {
+    "request": {
+      "description": "Read JSON from the approved API with private Bearer authentication; optionally write when granted.",
+      "input": { "properties": { "url": { "type": "string", "maxLength": 4000 }, "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] }, "body": { "type": "json" } }, "required": ["url"] }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "public-http",
+  "name": "Public HTTP / JSON",
+  "version": "0.1.0",
+  "publisher": "Morph local examples (unsigned)",
+  "description": "Build API clients for user-approved HTTPS origins. No accounts or API keys required.",
+  "driver": "http-json",
+  "auth": { "type": "none" },
+  "network": { "configurable": true, "defaults": ["https://api.open-meteo.com", "https://jsonplaceholder.typicode.com"] },
+  "permissions": ["Request JSON from approved HTTPS origins; URLs/query strings send app data to those services even for GET", "Optionally send requests that change remote data (separate approval)"],
+  "docs": "App: import { plugins } from '@morph/plugins'; await plugins.call('public-http', 'request', {url:'https://api.open-meteo.com/v1/forecast?latitude=51.5&longitude=-0.1&current=temperature_2m'}). URLs must match origins approved in the protected Plugins panel. GET is default. POST/PUT/PATCH/DELETE need explicit write permission; pass body as JSON. Headers and redirects are deliberately not exposed. Use useEffect plus loading/error state. Never put credentials in URLs/source. Real calls in Preview and agent tool calls each need separate user approval. Runtime results are JSON only, capped at 256 KiB.",
+  "methods": {
+    "request": {
+      "description": "Request JSON from a user-approved HTTPS origin. GET by default; optional writes require a separate grant.",
+      "input": { "properties": { "url": { "type": "string", "maxLength": 4000 }, "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] }, "body": { "type": "json" } }, "required": ["url"] }
+    }
+  }
+}

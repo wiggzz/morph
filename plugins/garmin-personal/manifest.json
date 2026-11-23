@@ -1,0 +1,35 @@
+{
+  "id": "garmin-personal",
+  "name": "Garmin Connect Personal API",
+  "version": "0.1.0",
+  "publisher": "Morph local examples (unsigned)",
+  "description": "Declarative example of the generic private-header token-exchange primitive. Personal API key stays in protected account setup; only the host uses the derived Bearer token.",
+  "driver": "http-json",
+  "auth": {
+    "type": "token-exchange",
+    "exchange": {
+      "url": "https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token",
+      "header": "Authorization",
+      "prefix": "ApiKey ",
+      "response": { "format": "text", "expiry": "jwt-exp" },
+      "maxTTLSeconds": 86400
+    },
+    "setup": "Create a Personal API key in Garmin Connect's developer settings, then enter it only here. Save the key and tap Connect using private token exchange. Never paste the key or returned JWT into chat or app source. This recipe uses Garmin's international server; a China-region recipe must declare the .cn exchange and API origin before connecting a separate instance."
+  },
+  "network": { "origins": ["https://personal.connectapi.garmin.com"] },
+  "permissions": ["Exchange your private API key only at the declared Garmin token endpoint", "Read JSON from Garmin's Personal API using a host-held Bearer token"],
+  "docs": "Use plugins.open('garmin-personal',{slot:'personal',label:'My Garmin'}) and save/use its instance ID. Open triggers protected account setup. Once connected, call plugins.call(instance.id,'request',{url:'https://personal.connectapi.garmin.com/...'}) using a GET path from https://developer.garmin.com/gc-developer-program/personal/swagger-docs/. Responses must be JSON; binary FIT downloads are not supported. The host POSTs the saved private key as Authorization: ApiKey to the fixed exchange endpoint, captures its plain-text JWT, reads exp only as a cache-expiry hint, and uses Authorization: Bearer for API reads. No refresh token or browser OAuth is involved. Renewal exchanges the key again on demand. A revoked/expired key requires protected reconnection. Token endpoints cannot be invoked through ordinary app requests. Reference implementation: https://github.com/garmin/connect-personal-api-python/blob/main/src/garmin_personal_api/auth.py. Do not request credentials in chat.",
+  "methods": {
+    "request": {
+      "description": "Read JSON from a documented Garmin Personal API path; credentials are host-injected.",
+      "input": {
+        "properties": {
+          "url": { "type": "string", "maxLength": 4000 },
+          "method": { "enum": ["GET"] },
+          "headers": { "type": "headers" }
+        },
+        "required": ["url"]
+      }
+    }
+  }
+}

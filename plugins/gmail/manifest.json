@@ -1,0 +1,36 @@
+{
+  "id": "gmail",
+  "name": "Gmail (read-only)",
+  "version": "0.1.0",
+  "publisher": "Morph local examples (unsigned; bring your own OAuth registration)",
+  "description": "Read mail using Google's Gmail API. Requires a Google Cloud OAuth Web application registration for this local prototype.",
+  "driver": "rest-json",
+  "auth": {
+    "type": "oauth2",
+    "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+    "tokenUrl": "https://oauth2.googleapis.com/token",
+    "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+    "authorizationParams": { "access_type": "offline", "prompt": "consent" },
+    "setup": "Enable Gmail API in Google Cloud. Configure OAuth consent with your own account as a test user. Create an OAuth client of type Web application; register the exact callback shown here. Enter its client ID and secret only in this protected panel. External Testing refresh tokens for Gmail commonly expire after 7 days. Public distribution requires Google's verification and a production authentication design; this local registration must not be embedded as a confidential secret in a public APK."
+  },
+  "network": { "origins": ["https://gmail.googleapis.com"] },
+  "permissions": ["Read your mailbox, including message bodies; cannot send, delete, archive or modify mail", "Separate approvals control access from Preview and direct agent calls"],
+  "docs": "App: import { plugins } from '@morph/plugins'; const page=await plugins.call('gmail','listMessages',{maxResults:20}); const message=await plugins.call('gmail','getMessage',{id:page.messages[0].id,format:'metadata'}). listMessages returns IDs/thread IDs, not subjects; getMessage includes headers/snippet and, with format:'full', MIME payload. Never render raw email HTML; start with headers/snippet/plain text. Setup and Google consent belong in the protected Plugins panel. No email mutation methods are provided. Preview and direct agent calls are blocked unless explicitly allowed. Mail shown in Preview can reach the selected AI through inspect/screenshots. Avoid fetching private mail through the agent tool unless necessary and approved.",
+  "methods": {
+    "listMessages": {
+      "description": "List up to 50 message IDs, optionally filtered by Gmail query and pagination token.",
+      "input": { "properties": { "q": { "type": "string", "maxLength": 1000 }, "pageToken": { "type": "string", "maxLength": 2000 }, "maxResults": { "type": "integer", "minimum": 1, "maximum": 50 } }, "required": [] },
+      "request": { "method": "GET", "path": "/gmail/v1/users/me/messages", "query": { "q": "q", "pageToken": "pageToken", "maxResults": "maxResults" }, "defaults": { "maxResults": 20 } }
+    },
+    "getMessage": {
+      "description": "Read message headers/snippet (metadata), or full MIME content when format is full.",
+      "input": { "properties": { "id": { "type": "string", "maxLength": 200, "pattern": "^[a-zA-Z0-9_-]+$" }, "format": { "enum": ["metadata", "minimal", "full"] } }, "required": ["id"] },
+      "request": { "method": "GET", "path": "/gmail/v1/users/me/messages/{id}", "query": { "format": "format" }, "defaults": { "format": "metadata" } }
+    },
+    "getProfile": {
+      "description": "Read the connected mailbox address and counts.",
+      "input": { "properties": {}, "required": [] },
+      "request": { "method": "GET", "path": "/gmail/v1/users/me/profile" }
+    }
+  }
+}

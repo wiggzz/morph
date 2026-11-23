@@ -1,0 +1,37 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {Library} from '../src/library.mjs';
+import {PluginManager} from '../src/plugins.mjs';
+import {Workspace} from '../src/workspace.mjs';
+import {RuntimeCapabilities} from '../src/runtime-capabilities.mjs';
+import {AgentBridge} from '../src/agent-bridge.mjs';
+const directory=new URL('../../plugins',import.meta.url).pathname;
+test('library migration preserves app source/releases/sessions; paths, chats, projects and durable data are independent',t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'morph-library-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const old=new Workspace(dir);old.write('/value.json','{"original":true}');const release=old.promote(old.snapshot(),'Existing release');
+  const before=fs.readFileSync(path.join(dir,'workspace.json'),'utf8');fs.mkdirSync(path.join(dir,'sessions'));fs.writeFileSync(path.join(dir,'sessions','old.jsonl'),'LEGACY SESSION UNCHANGED');
+  const p=new PluginManager({directory,dataDir:dir});const lib=new Library(dir,p.packages);
+  assert.equal(lib.workspace().state.live.id,release.id);assert.equal(fs.readFileSync(path.join(dir,'workspace.json'),'utf8'),before);assert.equal(fs.readFileSync(lib.chat().sessionFile,'utf8'),'LEGACY SESSION UNCHANGED');
+  lib.createChat();assert.throws(()=>lib.files('write','/App.tsx','bad'),/no primary/);
+  lib.create('app','second','Second','✦');assert.equal(lib.chat().primary,'app:second');
+  lib.files('write','/value.json','{"second":true}');assert.equal(lib.files('read','/apps/my-app/value.json'),'{"original":true}');assert.equal(lib.files('read','/apps/second/value.json'),'{"second":true}');
+  lib.create('plugin','custom-plugin','Custom','⚙');lib.files('write','/plugins/custom-plugin/index.ts','export const x=1;');assert.match(lib.packages.read('custom-plugin','/index.ts'),/x=1/);assert.ok(lib.chat().projects.includes('plugin:custom-plugin'));
+  for(const filename of ['/apps/../../auth.json','/plugins/custom-plugin/../auth.json','/apps/unknown/App.tsx','/apps/second'])assert.throws(()=>lib.files('read',filename));
+  assert.throws(()=>lib.create('app','../escape','Bad','X'));assert.throws(()=>lib.update('app:second',{icon:'a'.repeat(13)}));
+  lib.data('second','set','selectedAccount','i-public-id');lib.data('my-app','set','selectedAccount','another-id');lib.data('second','set','__proto__',{safe:true});
+  assert.equal({}.safe,undefined);assert.throws(()=>lib.data('second','set','huge','x'.repeat(16001)),/16 KiB/);
+  const restarted=new Library(dir,p.packages);assert.equal(restarted.data('second','get','selectedAccount'),'i-public-id');assert.equal(restarted.data('my-app','get','selectedAccount'),'another-id');
+  assert.equal(restarted.data('second','get','missing'),null);assert.equal(restarted.view().chats.length,2);assert.ok(!JSON.stringify(restarted.view()).includes('old.jsonl'));
+  assert.notEqual(restarted.workspace('my-app').snapshot().id,restarted.workspace('second').snapshot().id);
+});
+test('several live identities survive foreground changes; trusted ports have no permission cards but stale callers cannot act',t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'morph-runtimes-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const caps=new RuntimeCapabilities({}),bridge=new AgentBridge({capabilities:caps,dataDir:dir,trusted:true});
+  const a=caps.issue('live',{appID:'a',id:'hash-a'}), b=caps.issue('live',{appID:'b',id:'hash-b'});caps.select('a');
+  assert.equal(caps.record(b).appID,'b');assert.equal(caps.live('a').id,a);assert.equal(bridge.authorize('live','control','b'),null);assert.equal(bridge.authorizeLink(a,'b','control'),null);assert.equal(bridge.pending().length,0);
+  caps.revoke('live:b');assert.throws(()=>caps.record(b),/replaced/);assert.equal(caps.record(a).appID,'a');
+  caps.issue('live',{appID:'a',id:'new-a'});assert.throws(()=>caps.record(a),/replaced/);caps.clear();assert.equal(caps.active.size,0);
+});

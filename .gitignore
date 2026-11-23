@@ -1,0 +1,10 @@
+**/node_modules/
+.data/
+.test-data/
+.export-check/
+.downloads/
+**/.expo/
+**/.env*
+*.log
+*.pid
+expo-versions.json

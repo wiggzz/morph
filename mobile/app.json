@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Morph Lab",
+    "slug": "morph-lab",
+    "scheme": "morph",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "dev.local.morph",
+      "permissions": ["INTERNET"],
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "ios": { "supportsTablet": false }
+  }
+}
