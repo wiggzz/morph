@@ -67,9 +67,9 @@ export class PluginManager {
       return { ...m, files: undefined, requestId: this.state.requestIDs[m.id], requestedAt: this.state.requestTimes[m.id] || 0, installed, needsReapproval: !!grant && !installed, requested: !this.trusted && this.state.requests[m.id] === m.hash,
         grant: installed ? this.trusted ? {preview:true,agent:true,writes:true} : { preview: grant.preview, agent: grant.agent, writes: grant.writes } : null,
         origins: grant?.origins || m.network.origins || m.network.defaults,
-        configured: m.auth.type === 'none' || (keyedAuth(m.auth) ? !!secret.key : !!secret.clientID && (!needsClientSecret(m.auth) || !!secret.clientSecret)),
+        configured: m.auth.type === 'none' || (keyedAuth(m.auth) ? !!secret.key : !!(secret.clientID || m.auth.publicClientID) && (!needsClientSecret(m.auth) || !!secret.clientSecret)),
         connected: ['oauth2', 'token-exchange'].includes(m.auth.type) ? !!secret.tokens : keyedAuth(m.auth) ? !!secret.key : installed,
-        callbackURL: m.auth.type === 'oauth2' ? this.callbackURL(m.id) : undefined,
+        callbackURL: m.auth.type === 'oauth2' ? m.auth.browser?.redirectUri || this.callbackURL(m.id) : undefined,
       };
     });
   }
@@ -134,27 +134,32 @@ export class PluginManager {
     else delete this.secrets[id];
     this.persist(); this.notify();
   }
+  cancelOAuth(id){this.grant(id);this.abort(id);}
   beginOAuth(id) {
-    const m = this.get(id), grant = this.grant(id), secret = this.secrets[id];
+    const m = this.get(id), grant = this.grant(id);
+    if(m.auth.type==='oauth2'&&m.auth.publicClientID&&!this.secrets[id]?.clientID){this.secrets[id]={clientID:m.auth.publicClientID};this.persist();}
+    const secret=this.secrets[id];
     if (m.auth.type !== 'oauth2' || !secret?.clientID || (needsClientSecret(m.auth) && !secret?.clientSecret)) throw new Error('Configure the OAuth registration in Plugins first');
     this.abort(id);
     const state = crypto.randomBytes(32).toString('hex'), verifier = crypto.randomBytes(32).toString('base64url');
     const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
     for (const [key, p] of this.oauthPending) if (p.expires < Date.now()) this.oauthPending.delete(key);
-    this.oauthPending.set(state, { id, verifier, epoch: grant.epoch, expires: Date.now() + 10 * 60000 });
+    this.oauthPending.set(state, { id, verifier, redirectUri:m.auth.browser?.redirectUri||this.callbackURL(id), epoch: grant.epoch, expires: Date.now() + 10 * 60000 });
     const url = new URL(m.auth.authorizationUrl);
-    for (const [key, value] of Object.entries({ ...m.auth.authorizationParams, client_id: secret.clientID, redirect_uri: this.callbackURL(id), response_type: 'code', ...(m.auth.scopes.length ? { scope: m.auth.scopes.join(m.auth.scopeSeparator || ' ') } : {}), state, code_challenge: challenge, code_challenge_method: 'S256' })) url.searchParams.set(key, value);
+    for (const [key, value] of Object.entries({ ...m.auth.authorizationParams, client_id: secret.clientID, redirect_uri: m.auth.browser?.redirectUri||this.callbackURL(id), response_type: 'code', ...(m.auth.scopes.length ? { scope: m.auth.scopes.join(m.auth.scopeSeparator || ' ') } : {}), state, code_challenge: challenge, code_challenge_method: 'S256' })) url.searchParams.set(key, value);
     return url.toString();
   }
-  async finishOAuth(id, params) {
+  async finishOAuth(id, params, {browser=false}={}) {
+    if(!!this.get(id).auth.browser!==browser)throw new Error('Use the protected authorization callback for this flow');
     const state = params.get('state'), pending = this.oauthPending.get(state);
-    this.oauthPending.delete(state);
     if (!pending || pending.id !== id || pending.expires < Date.now() || this.grant(id).epoch !== pending.epoch) throw new Error('OAuth request expired or did not match. Start Connect again.');
+    this.oauthPending.delete(state);
     if (params.has('error') || !params.get('code')) throw new Error('Authorization was denied or not completed');
     const m = this.get(id), secret = this.secrets[id];
     const controller = this.track(id);
     try {
-      const tokens = await this.transport(m.auth.tokenUrl, { ...tokenRequest(m.auth, secret, { grant_type: 'authorization_code', code: params.get('code'), code_verifier: pending.verifier, redirect_uri: this.callbackURL(id) }), signal: controller.signal });
+      const tokens = await this.transport(m.auth.tokenUrl, { ...tokenRequest(m.auth, secret, { grant_type: 'authorization_code', code: params.get('code'), code_verifier: pending.verifier, redirect_uri: pending.redirectUri }), signal: controller.signal });
+      controller.signal.throwIfAborted();
       if (this.grant(id).epoch !== pending.epoch || this.secrets[id] !== secret) throw new Error('Plugin access changed during login');
       this.storeTokens(id, tokens); this.persist(); this.notify();
     } catch { throw new Error('OAuth exchange failed. Check the registration/callback and reconnect.'); }
@@ -221,6 +226,7 @@ export class PluginManager {
       const refresh = (async () => {
         try {
           const tokens = await this.transport(m.auth.tokenUrl, { ...tokenRequest(m.auth, secret, { grant_type: 'refresh_token', refresh_token: secret.tokens.refresh }), signal: controller.signal });
+          controller.signal.throwIfAborted();
           if (this.grant(id).epoch !== epoch || this.secrets[id] !== secret) throw new Error('Plugin permissions changed');
           this.storeTokens(id, tokens); this.persist();
         } catch { throw new Error('Account refresh failed; reconnect in Plugins'); }

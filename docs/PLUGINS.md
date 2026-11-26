@@ -33,7 +33,7 @@ The builder uses `plugins_list`, `plugin_docs`, `plugin_instances`, `plugin_call
 
 ## Protected account setup
 
-**Accounts & plugins** lists independent instances. Creating/opening an instance that needs credentials opens its setup panel. Enter an API key or OAuth registration there, never in app code/chat. OAuth redirects use:
+**Accounts & plugins** lists independent instances. Creating/opening an instance that needs credentials opens its setup panel. Enter an API key or OAuth registration there, never in app code/chat. Default external-browser OAuth redirects use:
 
 ```
 http://127.0.0.1:8787/oauth/instances/callback
@@ -44,6 +44,37 @@ A second OAuth account can reuse the first instance's client registration throug
 Instances pin immutable recipes, including provider endpoints and network destinations. Publishing/activating a new package release never silently moves existing credentials to its new provider/origin. Create a new instance and explicitly connect it if adopting a changed recipe.
 
 Current credential storage is private mode-0600 Termux files, **not encrypted Android Keystore storage**. Source, model context, public app data and ordinary metadata contain no keys/tokens. Existing private files can be retained as migration backups; removing an instance credential does not erase separately retained backups or revoke provider-side authorization.
+
+## Protected browser OAuth (generic primitive)
+
+An `oauth2` recipe may additionally declare:
+
+```json
+{
+  "type":"oauth2",
+  "clientAuth":"none",
+  "publicClientID":"provider-public-client",
+  "authorizationUrl":"https://login.provider.example/authorize",
+  "tokenUrl":"https://login.provider.example/token",
+  "scopes":["read","offline_access"],
+  "browser":{
+    "redirectUri":"https://provider.example/callback",
+    "origins":["https://login.provider.example"]
+  }
+}
+```
+
+`publicClientID` is optional public recipe metadata, not a secret, and is allowed only for public clients (`clientAuth:none`). Without it, the existing protected registration form still supplies the client ID/secret. `browser` is optional; existing external-browser/loopback OAuth is unchanged.
+
+The protected native browser navigates only to declared HTTPS sign-in origins, handles the provider's own login/MFA pages, and captures the exact callback origin/path (including provider-owned callbacks). It uses incognito/no shared-cookie mode, blocks file access, custom schemes and mixed content, and exposes no injected script or message bridge. Top-level origin enforcement is not a subresource firewall; provider pages execute provider JavaScript/network requests. No password/cookie scraping or headless login scripting is added. Passwords, MFA and cookies stay in this browser, not plugin JS or Node. The callback code/state travel only through the authenticated native channel; the host verifies pending instance/epoch, state, expiry and PKCE, exchanges the code using the pinned redirect URI, and stores/rotates private access/refresh tokens. Anonymous loopback callbacks cannot finish a browser-mode flow. Duplicate callbacks, cancelled/replaced flows and late responses are rejected. Closing a sign-in does not revoke authorization already completed at the provider. Local disconnect is still separate from provider revocation.
+
+This UI is outside app screenshots, generated chat and clickstream capture. Login cookies, callback codes, PKCE verifiers, credentials and token responses never become app/model tool results. Native browser behavior and account login require physical-device testing; providers can reject embedded browsers or shared public clients. This prototype is not an audited isolation boundary and does not validate OpenID identity or encrypt the private token files in Android Keystore.
+
+### Ecobee reference
+
+The bundled `ecobee` recipe uses public web-client configuration observed in `python-ecobee-api`: `https://auth.ecobee.com/authorize`, `/oauth/token`, and `https://www.ecobee.com/home/authCallback`. This is unofficial and may change or be disallowed by Ecobee; it is not proof that new accounts can authenticate. It requests narrower `openid offline_access smartRead smartWrite` scopes rather than the upstream client's additional PII/delete-grant scopes. Do not silently escalate if rejected. Real sign-in, scope acceptance, MFA and commands remain unverified until the user connects in protected UI.
+
+Use `plugins.open('ecobee',{slot:'personal'})`, then the instance's `request` method. The recipe docs give exact thermostat-selection, `setHold` (`holdClimateRef:home/away`, `holdType:nextTransition/indefinite`) and `resumeProgram` bodies. Inspect API `status.code` as well as HTTP status, select a real thermostat and confirm intentional writes. No Home Assistant server, LAN exception, provider-specific privileged adapter or password storage is required by the primitive. It cannot guarantee provider authorization. Existing user recipes are never overwritten; changed auth requires a new instance slot.
 
 ## Authoring
 

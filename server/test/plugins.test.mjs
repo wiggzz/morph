@@ -24,7 +24,7 @@ function approve(manager, id, extra = {}) {
 
 test('installation requests never grant access; Preview and agent permissions default off', async t => {
   const { manager } = setup(t);
-  assert.deepEqual(manager.list().map(p => p.id).sort(), ['bearer-http', 'garmin-personal', 'gmail', 'public-http']);
+  assert.deepEqual(manager.list().map(p => p.id).sort(), ['bearer-http', 'ecobee', 'garmin-personal', 'gmail', 'public-http']);
   assert.match(manager.requestInstall('public-http'), /Nothing has been installed/);
   await assert.rejects(manager.call('public-http', 'request', { url: 'https://api.open-meteo.com/' }, { surface: 'live' }), /approval/);
   assert.throws(() => manager.approve('public-http', { hash: 'stale', origins: ['https://example.com'] }), /changed/);

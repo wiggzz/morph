@@ -428,7 +428,9 @@ async function handle(message) {
   if (message.type.startsWith('instance_')) {
     if (message.type === 'instance_create') {const row = instances.open(message.plugin,message.options || {},message.appID || library.state.activeApp);send({type:'instance_setup',id:row.id});}
     else if (message.type === 'instance_configure') instances.configure(message.id,message.config || {});
-    else if (message.type === 'instance_connect') send({type:'instance_auth',id:message.id,url:instances.connect(message.id)});
+    else if (message.type === 'instance_connect') send({type:'instance_auth',id:message.id,url:instances.connect(message.id),label:instances.metadata(message.id).label,browser:instances.metadata(message.id).auth.browser||null});
+    else if(message.type==='instance_oauth_callback'){try{await instances.finishBrowser(message.id,message.url);send({type:'instance_auth_complete',id:message.id});}catch{send({type:'instance_auth_failed',id:message.id,error:'Sign-in failed or expired. Cancel and reconnect; check the recipe and provider support.'});}}
+    else if(message.type==='instance_oauth_cancel')instances.cancelOAuth(message.id);
     else if (message.type === 'instance_exchange') await instances.exchange(message.id);
     else if (message.type === 'instance_disconnect') instances.disconnect(message.id);
     else if (message.type === 'instance_copy_registration') instances.copyRegistration(message.from,message.id);

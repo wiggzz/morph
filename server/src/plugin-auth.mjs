@@ -1,4 +1,13 @@
 // Provider-neutral credential placement and OAuth 2 client authentication.
+import {httpsURL,origin} from './plugin-network.mjs';
+export function browserCallback(auth,value){
+  if(!auth.browser||typeof value!=='string'||value.length>16000)throw new Error('No protected browser flow');
+  let url;try{url=new URL(value);}catch{throw new Error('Invalid authorization callback');}
+  const expected=new URL(auth.browser.redirectUri);
+  if(url.origin!==expected.origin||url.pathname!==expected.pathname||url.username||url.password||url.hash)throw new Error('Authorization callback does not match the pinned URI');
+  if(url.searchParams.getAll('state').length!==1||url.searchParams.getAll('code').length>1||url.searchParams.getAll('error').length>1)throw new Error('Invalid authorization callback parameters');
+  return url.searchParams;
+}
 const forbiddenHeaders = new Set(['host', 'cookie', 'set-cookie', 'connection', 'content-length', 'transfer-encoding', 'upgrade', 'te', 'trailer', 'content-type', 'origin', 'referer', 'expect']);
 const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,64}$/;
 export const keyedAuth = auth => ['bearer', 'api-key', 'token-exchange'].includes(auth.type);
@@ -13,11 +22,13 @@ export const primitiveDocs = {
     { type: 'oauth2', clientAuth: ['client_secret_post', 'client_secret_basic', 'none'], note: 'Authorization code + PKCE; public clients use none. Requires provider app registration. Opaque access tokens are used as Bearer tokens; not OpenID identity verification.' },
   ],
   httpHeaders: 'Declare headers:{type:"headers"} in the request input schema to accept bounded public request metadata, e.g. API-version/Accept headers. Authorization, cookies, connection/routing headers and the declared private credential header cannot be supplied/overridden. REST recipes may declare static request.headers. Bodies remain JSON.',
+  oauthBrowser: {example:{publicClientID:'provider-public-client',browser:{redirectUri:'https://provider.example/callback',origins:['https://login.provider.example']}},note:'Optional oauth2 protected browser sign-in. Fixed HTTPS callback intercepted by native host, authorization-origin allowlist, incognito cookies/MFA in provider pages, PKCE/state and token exchange/rotation in host. Public client IDs are public recipe metadata, only with clientAuth:none. No password scraping, cookies, tokens or callbacks in plugin JS. Provider may prohibit embedded browsers or shared clients; real login must be verified.'},
   oauthParameters: 'authorizationParams and tokenParams accept bounded string values, e.g. audience/resource/login_hint. Broker-owned security fields cannot be overridden. scopeSeparator may be a space (default) or comma. Scopes may be empty if the provider allows that. Token responses must be JSON; expires_in may be omitted for non-expiring tokens. Missing/expired/revoked tokens may require reconnecting.',
 };
 
 export function validateAuth(auth) {
   if (!['none', 'bearer', 'api-key', 'oauth2', 'token-exchange'].includes(auth?.type)) throw new Error('Unsupported credential primitive');
+  if(auth.type!=='oauth2'&&(auth.browser!==undefined||auth.publicClientID!==undefined))throw new Error('Browser/public client configuration belongs to oauth2');
   if (auth.type === 'api-key') {
     if (typeof auth.header !== 'string' || !headerName.test(auth.header) || forbiddenHeaders.has(auth.header.toLowerCase()) || /^(proxy-|sec-|x-forwarded-)/i.test(auth.header)) throw new Error('Unsafe private credential header');
     if (auth.prefix !== undefined && (typeof auth.prefix !== 'string' || auth.prefix.length > 64 || /[^\x20-\x7e]/.test(auth.prefix))) throw new Error('Credential prefix must be short printable ASCII');
@@ -34,6 +45,14 @@ export function validateAuth(auth) {
     if (e.maxTTLSeconds !== undefined && (!Number.isInteger(e.maxTTLSeconds) || e.maxTTLSeconds < 1 || e.maxTTLSeconds > 86400)) throw new Error('Exchange cache lifetime must be 1–86400 seconds');
   }
   if (auth.type === 'oauth2') {
+    if(auth.publicClientID!==undefined&&(clientAuth(auth)!=='none'||typeof auth.publicClientID!=='string'||!auth.publicClientID.trim()||auth.publicClientID.length>512||/[\s\x00-\x1f]/.test(auth.publicClientID)))throw new Error('Public client ID requires a nonempty public OAuth client (clientAuth:none)');
+    if(auth.browser!==undefined){
+      const b=auth.browser;
+      if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).some(k=>!['redirectUri','origins'].includes(k))||!Array.isArray(b.origins)||!b.origins.length||b.origins.length>8)throw new Error('browser requires redirectUri and 1–8 sign-in origins');
+      const redirect=httpsURL(b.redirectUri);if(redirect.search)throw new Error('Browser callback must not contain query parameters');
+      for(const value of [...b.origins,redirect.origin]){const u=new URL(origin(value));if(!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*$/i.test(u.hostname)||/(?:^|\.)(localhost|local)$/i.test(u.hostname))throw new Error('Browser sign-in requires public HTTPS hostnames');}
+      if(!b.origins.includes(new URL(auth.authorizationUrl).origin))throw new Error('Browser origins must include the authorization origin');
+    }
     if (!['client_secret_post', 'client_secret_basic', 'none'].includes(clientAuth(auth))) throw new Error('Unsupported OAuth client authentication');
     if (auth.scopeSeparator !== undefined && ![' ', ','].includes(auth.scopeSeparator)) throw new Error('Use a space or comma scope separator');
     const reserved = new Set(['client_id', 'client_secret', 'redirect_uri', 'response_type', 'scope', 'state', 'code', 'code_verifier', 'code_challenge', 'code_challenge_method', 'grant_type', 'refresh_token', 'access_token', 'client_assertion', 'client_assertion_type']);

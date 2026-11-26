@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {browserCallback} from './plugin-auth.mjs';
 import { PluginManager } from './plugins.mjs';
 export class PluginInstances {
   constructor({dataDir,plugins,callbackBase,notify = () => {},setup = () => {},saveBinding = () => {}}) {
@@ -72,10 +73,12 @@ export class PluginInstances {
   copyRegistration(from,to) {
     const a = this.manager(from), b = this.manager(to), ap = this.pluginID(from), bp = this.pluginID(to);
     if (ap !== bp || a.get(ap).auth.type !== 'oauth2') throw new Error('Choose another instance of the same OAuth plugin');
-    const secret = a.secrets[ap];if(!secret?.clientID) throw new Error('Source registration is not configured');
-    this.configure(to,{clientID:secret.clientID,clientSecret:secret.clientSecret});
+    const secret = a.secrets[ap],clientID=secret?.clientID||a.get(ap).auth.publicClientID;if(!clientID) throw new Error('Source registration is not configured');
+    this.configure(to,{clientID,clientSecret:secret?.clientSecret});
   }
   connect(id) {return this.manager(id).beginOAuth(this.pluginID(id));}
+  cancelOAuth(id){this.manager(id).cancelOAuth(this.pluginID(id));}
+  async finishBrowser(id,value){const m=this.manager(id),plugin=this.pluginID(id);const params=browserCallback(m.get(plugin).auth,value);await m.finishOAuth(plugin,params,{browser:true});this.notify();}
   async exchange(id) {await this.manager(id).exchange(this.pluginID(id));this.notify();return {id,connected:this.metadata(id).connected};}
   async finish(params) {
     const state = params.get('state');

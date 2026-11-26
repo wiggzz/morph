@@ -1,0 +1,31 @@
+{
+  "id": "ecobee",
+  "name": "Ecobee (web OAuth reference)",
+  "version": "0.1.0",
+  "publisher": "Morph local examples (unsigned)",
+  "description": "Reference Ecobee web OAuth recipe using the generic protected sign-in browser. Unofficial public web client; real account login and thermostat commands are not yet verified.",
+  "driver": "http-json",
+  "auth": {
+    "type": "oauth2",
+    "clientAuth": "none",
+    "publicClientID": "183eORFPlXyz9BbDZwqexHPBQoVjgadh",
+    "authorizationUrl": "https://auth.ecobee.com/authorize",
+    "tokenUrl": "https://auth.ecobee.com/oauth/token",
+    "scopes": ["openid", "offline_access", "smartRead", "smartWrite"],
+    "authorizationParams": {"audience": "https://prod.ecobee.com/api/v1"},
+    "browser": {
+      "redirectUri": "https://www.ecobee.com/home/authCallback",
+      "origins": ["https://auth.ecobee.com"]
+    },
+    "setup": "Connect in the protected sign-in browser and complete Ecobee's own login/MFA pages. The public web client ID and callback come from python-ecobee-api, not a Morph registration. Provider policy, embedded-browser support and these narrower scopes may change or be rejected; do not claim success without real login. No password belongs in app code or chat. Tokens are private host storage. An ID token, if returned, is ignored; this is not OpenID identity verification."
+  },
+  "network": {"configurable": false, "origins": ["https://api.ecobee.com"], "singleOrigin": true},
+  "permissions": ["Read thermostat state using smartRead", "Change thermostat comfort holds using smartWrite", "Keep a private renewable account session using offline_access"],
+  "docs": "REFERENCE ONLY: login and commands require real-account testing. Sources: https://github.com/nkgilley/python-ecobee-api/blob/master/pyecobee/const.py and __init__.py; https://www.ecobee.com/home/developer/api/documentation/v1/functions/SetHold.shtml . This uses a public Ecobee web client, not an official Morph partnership or developer-registration bypass guarantee. Open a new instance with plugins.open('ecobee',{slot:'personal'}) and connect only in protected setup. Use its INSTANCE ID. All calls use request({url,method?,body?}). List thermostats: GET https://api.ecobee.com/1/thermostat?format=json&json= plus encodeURIComponent(JSON.stringify({selection:{selectionType:'registered',selectionMatch:'',includeRuntime:true,includeProgram:true,includeEvents:true}})). Inspect API-level status.code as well as HTTP success; nonzero is a service error. Home/Away: POST https://api.ecobee.com/1/thermostat?format=json with body {selection:{selectionType:'thermostats',selectionMatch:thermostatId},functions:[{type:'setHold',params:{holdClimateRef:'home',holdType:'nextTransition'}}]}. Use holdClimateRef:'away' for Away; holdType:'indefinite' for an explicitly chosen indefinite hold. Read available climate references from the thermostat program; do not assume every account uses the same references. Resume schedule: same POST endpoint with functions:[{type:'resumeProgram',params:{resumeAll:true}}]. Do not silently send writes to every thermostat; select a real thermostat ID. Keep the UI to the user's requested Home/Away controls plus necessary connection/status/thermostat selection. Never expose credentials, cookies or tokens. Existing instances stay pinned to their recipe release; changed auth needs a new slot. The auth scopes deliberately omit the upstream library's piiWrite/piiRead/deleteGrants scopes; do not automatically escalate if the provider rejects these narrower scopes.",
+  "methods": {
+    "request": {
+      "description": "Bounded JSON calls to the fixed Ecobee API with private Bearer injection; check response status.code.",
+      "input": {"properties": {"url": {"type": "string", "maxLength": 4000}, "method": {"enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]}, "body": {"type": "json"}}, "required": ["url"]}
+    }
+  }
+}

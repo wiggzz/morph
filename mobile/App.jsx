@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, TextInput, ScrollView, Modal, StyleSheet, StatusBar as NativeStatusBar, Platform, Linking, Keyboard, ActivityIndicator, Switch } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import {OAuthBrowser} from './src/OAuthBrowser';
 import { NativeSurface, setInteractionSink } from './src/NativeSurface';
 import { PluginsPanel } from './src/PluginsPanel';
 import { VersionsPanel } from './src/VersionsPanel';
@@ -162,7 +163,9 @@ export default function App() {
         else if (message.type === 'show_app') {setFrontApp(message.appID);setSurface('live');setHomeOpen(false);}
         else if (message.type === 'close_app') {live.current[message.appID]?.clear();setRuntimeApps(ids => ids.filter(id => id !== message.appID));}
         else if (message.type === 'instance_setup') {setFocusedInstance(message.id);setPluginsOpen(true);}
-        else if (message.type === 'instance_auth') {setPluginAuth(message);Linking.openURL(message.url).catch(e => setError(e.message));}
+        else if (message.type === 'instance_auth') {setPluginAuth(message);if(!message.browser)Linking.openURL(message.url).catch(e => setError(e.message));}
+        else if(message.type==='instance_auth_complete')setPluginAuth(current=>current?.id===message.id?null:current);
+        else if(message.type==='instance_auth_failed')setPluginAuth(current=>current?.id===message.id?{...current,error:message.error}:current);
         else if (message.type === 'show_plugin') {setHomeOpen(true);if(message.build) setChatOpen(true);else openPluginFiles(message.id);}
         else if(message.type==='chat_view') setChatView(message);
         else if(message.type==='chat_tool_cancel') systemChat.current?.cancelTool(message.id);
@@ -308,6 +311,7 @@ export default function App() {
       </View>
     </Modal>
     <PluginsPanel focusedInstance={focusedInstance} focusedPlugin={focusedPlugin} visible={pluginsOpen} onClose={() => setPluginsOpen(false)} state={state} send={send} onEdit={openPluginFiles} builds={pluginBuilds} auth={pluginAuth} error={error} />
+    {pluginAuth?.browser&&<OAuthBrowser key={pluginAuth.url} auth={pluginAuth} onCancel={()=>{send({type:'instance_oauth_cancel',id:pluginAuth.id});setPluginAuth(null);}} onCallback={url=>send({type:'instance_oauth_callback',id:pluginAuth.id,url})}/>}
     <VersionsPanel visible={versionsOpen} onClose={() => setVersionsOpen(false)} state={state} send={send} canPromote={canPromote} error={error} />
   </View>;
 }

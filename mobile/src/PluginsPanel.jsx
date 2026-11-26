@@ -21,22 +21,22 @@ export function PluginsPanel({visible,focusedInstance,focusedPlugin,onClose,stat
         <Text style={s.help}>API origin(s), bound to this instance:</Text><TextInput value={origins} onChangeText={setOrigins} editable={!instance.connected && !!instance.network.configurable} style={s.field} multiline autoCapitalize="none" autoCorrect={false} />
         {instance.auth.type === 'oauth2' && <>
           <Text selectable style={s.help}>Authorize: {instance.auth.authorizationUrl}\nToken exchange: {instance.auth.tokenUrl}\nScopes: {instance.auth.scopes.join(', ')}\nClient authentication: {instance.auth.clientAuth || 'client_secret_post'}</Text>
-          <Text style={s.help}>{instance.auth.setup}</Text><Text selectable style={s.text}>Register this callback:\n{instance.callbackURL}</Text>
-          <TextInput value={clientID} onChangeText={setClientID} style={s.field} placeholder="OAuth client ID" placeholderTextColor="#8198a2" autoCapitalize="none" autoCorrect={false} />
+          <Text style={s.help}>{instance.auth.setup}</Text><Text selectable style={s.text}>{instance.auth.browser?'Pinned browser callback:':'Register this callback:'}\n{instance.callbackURL}</Text>
+          {instance.auth.publicClientID?<Text selectable style={s.help}>Public client ID (from pinned recipe): {instance.auth.publicClientID}</Text>:<TextInput value={clientID} onChangeText={setClientID} style={s.field} placeholder="OAuth client ID" placeholderTextColor="#8198a2" autoCapitalize="none" autoCorrect={false} />}
         </>}
         {instance.auth.type === 'token-exchange' && <>
           <Text selectable style={s.help}>Private key sent only to: {instance.auth.exchange.url}\nHeader: {instance.auth.exchange.header} · prefix: {instance.auth.exchange.prefix || '(none)'}\nOnly the derived Bearer token goes to the API origin above. Tokens stay inside the host and renew on demand.</Text>
           <Text style={s.help}>{instance.auth.setup}</Text>
         </>}
         {(keyed || needsSecret) && <TextInput value={secret} onChangeText={setSecret} secureTextEntry style={s.field} placeholder={keyed ? 'Private API key / token' : 'OAuth client secret'} placeholderTextColor="#8198a2" autoCapitalize="none" autoCorrect={false} />}
-        {instance.auth.type !== 'none' && <Button title={keyed ? 'Save private credential' : 'Save OAuth registration'} disabled={keyed ? !secret : !clientID || (needsSecret && !secret)} onPress={() => {
+        {instance.auth.type !== 'none' && !instance.auth.publicClientID && <Button title={keyed ? 'Save private credential' : 'Save OAuth registration'} disabled={keyed ? !secret : !clientID || (needsSecret && !secret)} onPress={() => {
           send({type:'instance_configure',id:instance.id,config:{origins:origins.split(/[\n,]/).map(s => s.trim()).filter(Boolean),...(keyed ? {key:secret} : {clientID,...(needsSecret ? {clientSecret:secret} : {})})}});setSecret('');setClientID('');
         }} />}
         {instance.auth.type === 'oauth2' && <>
           {!instance.configured && rows.filter(r => r.id !== instance.id && r.plugin === instance.plugin && r.configured).map(r => <Button key={r.id} title={`Use OAuth registration from ${r.label}`} onPress={() => send({type:'instance_copy_registration',id:instance.id,from:r.id})} />)}
           <Text style={s.help}>Reusing registration does NOT copy account tokens. Connect each account separately.</Text>
-          <Button title="Connect this account in browser ↗" disabled={!instance.configured} onPress={() => send({type:'instance_connect',id:instance.id})} />
-          {auth?.id === instance.id && <Button title="Reopen sign-in ↗" onPress={() => Linking.openURL(auth.url)} />}
+          <Button title={instance.auth.browser?'Connect in protected sign-in browser':'Connect this account in browser ↗'} disabled={!instance.configured} onPress={() => send({type:'instance_connect',id:instance.id})} />
+          {auth?.id === instance.id && !auth.browser && <Button title="Reopen sign-in ↗" onPress={() => Linking.openURL(auth.url)} />}
         </>}
         {instance.auth.type === 'token-exchange' && <Button title="Connect using private token exchange" disabled={!instance.configured || instance.connected} onPress={() => send({type:'instance_exchange',id:instance.id})} />}
         {instance.configured && instance.auth.type !== 'none' && <Button title="Disconnect this instance locally" onPress={() => send({type:'instance_disconnect',id:instance.id})} />}
